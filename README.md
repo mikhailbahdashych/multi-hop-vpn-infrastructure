@@ -127,7 +127,7 @@ You will also need at least one of the following cloud accounts:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/bl4drnnr/multi-hop-vpn-infrastructure.git
+git clone https://github.com/mikhailbahdashych/multi-hop-vpn-infrastructure.git
 cd multi-hop-vpn-infrastructure
 ```
 

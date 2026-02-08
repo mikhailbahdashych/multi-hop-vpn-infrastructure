@@ -20,8 +20,8 @@ pki/
 # Generated client configs
 clients/
 
-# Ansible generated inventory
-ansible/inventory/
+# Ansible generated inventory (keep group_vars, ignore generated hosts file)
+ansible/inventory/hosts.yml
 
 # OS
 .DS_Store

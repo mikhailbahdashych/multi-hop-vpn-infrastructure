@@ -11,6 +11,15 @@
         state: present
         update_cache: true
 
+    - name: Stop any existing WireGuard interfaces
+      ansible.builtin.shell: |
+        for conf in /etc/wireguard/*.conf; do
+          [ -f "$conf" ] || continue
+          iface=$(basename "$conf" .conf)
+          wg-quick down "$iface" 2>/dev/null || true
+        done
+      changed_when: false
+
     - name: Generate WireGuard private key
       ansible.builtin.shell: wg genkey
       args:

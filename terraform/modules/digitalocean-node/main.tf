@@ -1,3 +1,11 @@
+terraform {
+  required_providers {
+    digitalocean = {
+      source = "digitalocean/digitalocean"
+    }
+  }
+}
+
 resource "digitalocean_droplet" "node" {
   image    = "ubuntu-24-04-x64"
   name     = var.name

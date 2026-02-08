@@ -1,0 +1,14 @@
+---
+- name: Multi-hop VPN deployment
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display deployment start
+      debug:
+        msg: "Starting multi-hop VPN deployment"
+      run_once: true
+
+- import_playbook: playbooks/01-common.yml
+- import_playbook: playbooks/02-wireguard.yml
+- import_playbook: playbooks/03-openvpn.yml
+- import_playbook: playbooks/04-routing.yml

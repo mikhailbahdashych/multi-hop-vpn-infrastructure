@@ -1,0 +1,72 @@
+---
+- name: Install OpenVPN
+  ansible.builtin.apt:
+    name: openvpn
+    state: present
+    update_cache: true
+
+- name: Create OpenVPN server directory
+  ansible.builtin.file:
+    path: /etc/openvpn/server
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Copy CA certificate
+  ansible.builtin.copy:
+    src: "{{ pki_dir }}/ca.crt"
+    dest: /etc/openvpn/server/ca.crt
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Copy server certificate
+  ansible.builtin.copy:
+    src: "{{ pki_dir }}/issued/server.crt"
+    dest: /etc/openvpn/server/server.crt
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Copy server private key
+  ansible.builtin.copy:
+    src: "{{ pki_dir }}/private/server.key"
+    dest: /etc/openvpn/server/server.key
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Copy DH parameters
+  ansible.builtin.copy:
+    src: "{{ pki_dir }}/dh.pem"
+    dest: /etc/openvpn/server/dh.pem
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Generate TLS-auth key
+  ansible.builtin.command: openvpn --genkey secret /etc/openvpn/server/ta.key
+  args:
+    creates: /etc/openvpn/server/ta.key
+
+- name: Fetch TLS-auth key for client configs
+  ansible.builtin.fetch:
+    src: /etc/openvpn/server/ta.key
+    dest: "{{ pki_dir }}/ta.key"
+    flat: true
+
+- name: Deploy OpenVPN server config
+  ansible.builtin.template:
+    src: server.conf.j2
+    dest: /etc/openvpn/server/server.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart openvpn
+
+- name: Enable and start OpenVPN
+  ansible.builtin.systemd:
+    name: openvpn-server@server
+    enabled: true
+    state: started

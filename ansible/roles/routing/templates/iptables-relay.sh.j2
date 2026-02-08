@@ -1,0 +1,14 @@
+#!/bin/bash
+# Relay node iptables: Forward between wg_in and wg_out
+set -euo pipefail
+
+# Flush existing rules
+iptables -F FORWARD
+iptables -t nat -F POSTROUTING
+
+# NAT traffic leaving via wg_out
+iptables -t nat -A POSTROUTING -o wg_out -j MASQUERADE
+
+# Forward between WireGuard interfaces
+iptables -A FORWARD -i wg_in -o wg_out -j ACCEPT
+iptables -A FORWARD -i wg_out -o wg_in -m state --state RELATED,ESTABLISHED -j ACCEPT

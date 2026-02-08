@@ -1,0 +1,3 @@
+---
+- name: persist iptables
+  ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4

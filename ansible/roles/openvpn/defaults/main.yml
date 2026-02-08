@@ -1,0 +1,11 @@
+---
+openvpn_port: 1194
+openvpn_proto: udp
+openvpn_cipher: AES-256-GCM
+openvpn_auth: SHA256
+openvpn_subnet: "10.8.0.0"
+openvpn_netmask: "255.255.255.0"
+dns_servers:
+  - "1.1.1.1"
+  - "1.0.0.1"
+pki_dir: "{{ playbook_dir }}/../pki"

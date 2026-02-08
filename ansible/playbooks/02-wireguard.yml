@@ -1,0 +1,50 @@
+---
+# Play 1: Install WireGuard and generate keys on all nodes
+- name: "WireGuard - Install and generate keys"
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Install WireGuard
+      ansible.builtin.apt:
+        name: wireguard
+        state: present
+        update_cache: true
+
+    - name: Generate WireGuard private key
+      ansible.builtin.shell: wg genkey
+      args:
+        creates: /etc/wireguard/private.key
+      register: wg_genkey
+
+    - name: Save private key to file
+      ansible.builtin.copy:
+        content: "{{ wg_genkey.stdout }}"
+        dest: /etc/wireguard/private.key
+        owner: root
+        group: root
+        mode: "0600"
+      when: wg_genkey.changed
+
+    - name: Read private key
+      ansible.builtin.slurp:
+        src: /etc/wireguard/private.key
+      register: wg_private_key_b64
+
+    - name: Derive public key
+      ansible.builtin.shell: echo '{{ (wg_private_key_b64.content | b64decode).strip() }}' | wg pubkey
+      register: wg_pubkey_result
+      changed_when: false
+
+    - name: Set WireGuard key facts
+      ansible.builtin.set_fact:
+        wg_private_key: "{{ (wg_private_key_b64.content | b64decode).strip() }}"
+        wg_public_key: "{{ wg_pubkey_result.stdout.strip() }}"
+
+# Play 2: Deploy WireGuard configs with peer public keys and bring up interfaces
+- name: "WireGuard - Deploy configs and start tunnels"
+  hosts: all
+  become: true
+  gather_facts: false
+  roles:
+    - wireguard

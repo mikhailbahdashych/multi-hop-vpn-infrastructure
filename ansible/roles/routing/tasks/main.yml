@@ -1,0 +1,17 @@
+---
+- name: Deploy iptables rules
+  ansible.builtin.template:
+    src: "iptables-{{ node_role }}.sh.j2"
+    dest: /usr/local/bin/vpn-iptables.sh
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Apply iptables rules
+  ansible.builtin.command: /usr/local/bin/vpn-iptables.sh
+  changed_when: true
+
+- name: Persist iptables rules
+  ansible.builtin.shell: |
+    iptables-save > /etc/iptables/rules.v4
+  changed_when: true

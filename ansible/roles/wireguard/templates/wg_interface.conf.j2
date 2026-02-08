@@ -1,0 +1,26 @@
+# {{ item.interface }} - {{ item.direction }} tunnel on {{ inventory_hostname }}
+[Interface]
+PrivateKey = {{ wg_private_key }}
+Address = {{ item.local_ip }}/30
+{% if item.direction == "inbound" %}
+ListenPort = {{ wireguard_port }}
+{% endif %}
+
+{% set peer_host = hostvars | dict2items | selectattr('value.ansible_host', 'defined') | selectattr('value.ansible_host', 'equalto', item.peer_public_ip) | map(attribute='key') | first %}
+[Peer]
+PublicKey = {{ hostvars[peer_host]['wg_public_key'] }}
+{% if node_role == "entry" and item.direction == "outbound" %}
+AllowedIPs = 0.0.0.0/0
+{% elif node_role == "exit" and item.direction == "inbound" %}
+AllowedIPs = {{ item.peer_ip }}/32, 10.8.0.0/24
+{% elif node_role == "relay" and item.direction == "inbound" %}
+AllowedIPs = {{ item.peer_ip }}/32, 10.8.0.0/24
+{% elif node_role == "relay" and item.direction == "outbound" %}
+AllowedIPs = 0.0.0.0/0
+{% else %}
+AllowedIPs = {{ item.peer_ip }}/32
+{% endif %}
+{% if item.direction == "outbound" %}
+Endpoint = {{ item.peer_public_ip }}:{{ wireguard_port }}
+PersistentKeepalive = 25
+{% endif %}

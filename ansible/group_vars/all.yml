@@ -1,0 +1,25 @@
+---
+# Network configuration
+openvpn_subnet: "10.8.0.0"
+openvpn_netmask: "255.255.255.0"
+openvpn_port: 1194
+openvpn_proto: udp
+openvpn_cipher: AES-256-GCM
+openvpn_auth: SHA256
+
+wireguard_port: 51820
+
+# DNS servers pushed to VPN clients
+dns_servers:
+  - "1.1.1.1"
+  - "1.0.0.1"
+
+# Base packages installed on all nodes
+base_packages:
+  - ufw
+  - fail2ban
+  - iptables-persistent
+  - curl
+  - wget
+  - unzip
+  - jq

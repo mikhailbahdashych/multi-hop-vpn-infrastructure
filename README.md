@@ -1,142 +1,587 @@
 <h1 align="center">
-    OpenVPN DigitalOcean Infrastructure
+    Multi-Hop VPN Infrastructure
 </h1>
 
-## Table of contents
-1. [Introduction](#introduction)
-2. [Prerequirements](#prerequirements)
-2. [Theory](#theory)
-3. [Network Diagram and Description](#network-diagram-and-description)
-4. [Step-by-Step Guideline](#step-by-step-guideline)
-5. [Repository Source Code Usage](#repository-source-code-usage)
-6. [References and Contact](#references-and-contact)
-7. [License](#license)
+<p align="center">
+    Multi-cloud, multi-hop VPN chain deployment using Terraform, Ansible, OpenVPN, and WireGuard across DigitalOcean and AWS.
+</p>
 
-![DigitalOcean](https://img.shields.io/badge/DigitalOcean-%230167ff.svg?style=for-the-badge&logo=digitalOcean&logoColor=white)
 ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white)
+![Ansible](https://img.shields.io/badge/ansible-%231A1918.svg?style=for-the-badge&logo=ansible&logoColor=white)
+![DigitalOcean](https://img.shields.io/badge/DigitalOcean-%230167ff.svg?style=for-the-badge&logo=digitalOcean&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 
 ---
 
-### Introduction
+## Table of Contents
 
-**OpenVPN** - is a virtual private network system that implements techniques to create secure point-to-point or site-to-site connections in routed or bridged configurations and remote access facilities. It implements both client and server applications.
-
-**DigitalOcean** - is an American cloud infrastructure provider. DigitalOcean provides developers, startups, and SMBs with cloud **infrastructure-as-a-service** (or just **IaaS**) platforms.
-
-**Terraform** - is an open-source, infrastructure as code, software tool created by HashiCorp. Users define and provide data center infrastructure using a declarative configuration language known as HashiCorp Configuration Language, or optionally JSON.
-
-The presented project presents **OpenVPN** infrastructure build on **DigitalOcean** with help of **Terraform** IaaS programming language. Bellow will be described:
-
-- the diagram of the whole built virtual privagte network with devices
-- step-by-step instruction on how to implement it using **Terraform** (this repository) and on your own
-- detailed information about **TLS/SSL, HTTPS, certificates, key pairs** etc.
-
-_**Happy reading!**_
-
----
-
-### Prerequirements
-
-In order to execute and build current infrastructure, make sure you have `Terraform` and `Ansible` installed on your machine.
-
-Versions can be checked by typing in terminal:
-
-1. `terraform --version`
-
-    ```
-    Terraform v1.3.4
-    ```
-
-2. `ansible --version`
-
-    ```
-    ansible [core 2.13.6]
-    ```
-
-Also, you'll have to obtain your `DigitalOcean` API token. More about how to generate and how to use this token you can find [here](#references-and-contact).
+1. [Introduction](#introduction)
+2. [Architecture](#architecture)
+3. [Prerequisites](#prerequisites)
+4. [Installation](#installation)
+5. [Credential Setup](#credential-setup)
+6. [Usage](#usage)
+7. [Chain Configuration Examples](#chain-configuration-examples)
+8. [Make Targets Reference](#make-targets-reference)
+9. [Verification and Testing](#verification-and-testing)
+10. [Repository Structure](#repository-structure)
+11. [Security Considerations](#security-considerations)
+12. [Cost Estimates](#cost-estimates)
+13. [License](#license)
 
 ---
 
-### Theory
+## Introduction
 
-Let's start with a little bit of theory.
+This project is an Infrastructure-as-Code (IaC) implementation of a **multi-hop VPN chain** that can be deployed across multiple cloud providers. The system routes client traffic through a series of encrypted tunnels so that **no single node in the chain can observe both the client's real IP address and the traffic's final destination**. This property is known as traffic analysis resistance.
 
-First of all, we shoud define terminology we are going to use.
+The architecture combines two VPN technologies:
 
-1. **Client** - end-user, you or your laptop, mobile phone etc.
-2. **OpenVPN Server** (or just **server**) - server, where we configured our OpenVPN service. Also, this is server we, as clients, are going to connect.
-3. **Certificate Authorities** (or just **CA**) - is an entity that stores, signs, and issues digital certificates. In our particular case, it is only going to sign requests by server.
-4. **Certificate** - in cryptography, a public key certificate, also known as a digital certificate or identity certificate, is an electronic document used to prove the validity of a public key. Certificate contains public key of the owner and signing by CA.
+- **OpenVPN** serves as the client-facing entry point. Users connect with standard OpenVPN clients using `.ovpn` configuration files generated by the project's PKI tooling.
+- **WireGuard** forms the inter-node tunnel backbone. Each adjacent pair of nodes in the chain is connected by a WireGuard point-to-point tunnel, providing high-performance encrypted forwarding.
 
-One very important thing that should be mentioned:
-- Only our **OpenVPN Server** will be the only one entity, that will generate private keys and certificates for **clients**. Even though our server generates **private key**, it never should keep it. The only one entity, that can have direct access to private user key is end-user. [Here](https://security.stackexchange.com/questions/264667/why-does-the-openvpn-server-need-to-keep-clients-private-key) you can find why **OpenVPN Server** doesn't need to keep the client's private key.
+The infrastructure is fully defined in code. **Terraform** provisions cloud resources (droplets, EC2 instances, firewalls, security groups, SSH keys) on DigitalOcean and/or AWS. **Ansible** handles all post-provisioning configuration: OS hardening, VPN software installation, key exchange, tunnel setup, and routing rules. A set of shell scripts wraps Easy-RSA for local PKI management, ensuring that the Certificate Authority private key never leaves the operator's machine.
 
-When client wants to connect to server, it has to show certificate, signed by CA. But how does this signing work? As it has been mentioned above, only our VPN server is entity, that can generate those certificates for clients. Here is how certificated are generated and signed by **CA's**:
-
-1. Server generates request - **Certificate Signing Request** or just **CSR** - and a pair of public and private key. The **CSR** would contain a copy of the public key and some basic information about the subject.
-2. Certificate request is sent to CA server, once the CA is done signing the cert using its private key, the CA would then return the cert. On these certificates there is a copy of the public key of the CA who might issue (sign) your server certificate.
-
-In this particular case, our server will also generate `.ovpn` files, that clients will use in order to connect to server. More information about structure of files with `.ovpn` extention you can find [here](https://serverfault.com/questions/963237/create-own-ovpn-file-from-using-certificate-and-key).
-
-When clients connect to OpenVPN, they use asymmetric encryption (also known as public/private key) to perform a `TLS` handshake. However, when transmitting encrypted VPN traffic, the server and clients use symmetric encryption, which is also known as shared key encryption. So, let's break this down step-by-step, how clients connect to VPN servers:
-
-1. Client wants to connect to server. In order to do that, it shows to server certificate. Remember, that certificate contains public key and signed by **CA**.
-2. From now on, server can compare certificates of client and CA and verifies, if certificate actually has been signed by proper **CA** by using its certificate. The certificate of **CA** is stored on server.
-3. If everything is matching while this `TLS` handshake, the connection is established and transmitting is starting in this encrypted VPN traffic where the server and clients use symmetric encryption, which is also known as shared key encryption.
+The project supports chains of any length: a minimum of 2 nodes (entry + exit) and no upper limit on relay nodes. Nodes can be mixed freely between DigitalOcean and AWS, enabling geographic distribution across different providers and regions.
 
 ---
 
-### Network Diagram and Description
+## Architecture
+
+### High-Level Data Flow
+
+```
+                                    WireGuard Tunnel Backbone
+                          ┌──────────────────────────────────────────┐
+                          │                                          │
+ ┌────────┐  OpenVPN   ┌──┴──────┐  WireGuard  ┌──────────┐  WireGuard  ┌──┴──────┐   NAT    ┌──────────┐
+ │ Client  ├───────────►│  Entry  ├────────────►│  Relay   ├────────────►│  Exit   ├─────────►│ Internet │
+ │         │  UDP 1194  │  Node   │  UDP 51820  │  Node(s) │  UDP 51820 │  Node   │          │          │
+ └────────┘            └─────────┘             └──────────┘            └─────────┘          └──────────┘
+                        tun0 ─► wg0            wg_in ─► wg_out         wg0 ─► eth0
+```
+
+### Node Roles
+
+| Role | Interfaces | Function |
+|------|-----------|----------|
+| **Entry** | `tun0` (OpenVPN) + `wg0` (WireGuard out) | Accepts client connections, forwards traffic into the WireGuard chain |
+| **Relay** | `wg_in` (WireGuard in) + `wg_out` (WireGuard out) | Forwards traffic between adjacent tunnels. Sees neither source nor destination |
+| **Exit** | `wg0` (WireGuard in) + `eth0` (internet) | Receives traffic from the chain, NAT masquerades to the public internet |
+
+Roles are **not user-configured**. They are determined automatically by position: the first node in the chain is always entry, the last is always exit, and everything in between is a relay.
+
+### Network Addressing
+
+| Network | CIDR | Purpose |
+|---------|------|---------|
+| OpenVPN client subnet | `10.8.0.0/24` | IP pool for connected VPN clients |
+| WireGuard tunnels | `10.0.0.0/16` | /30 subnets allocated per hop (auto-computed) |
+
+### Tunnel Pair Addressing
+
+Each adjacent pair of nodes in the chain receives a `/30` subnet carved from `10.0.0.0/16`. For a 3-node chain:
+
+```
+Entry (10.0.0.1/30) ──── wg tunnel ──── Relay (10.0.0.2/30)
+Relay (10.0.0.5/30) ──── wg tunnel ──── Exit  (10.0.0.6/30)
+```
+
+### Security Model
+
+```
+ What the Entry node sees:     Client IP ──────►  ?????
+ What the Relay node sees:     ?????     ──────►  ?????
+ What the Exit node sees:      ?????     ──────►  Destination
+```
+
+No single node has visibility into both the client's origin IP and the final destination. This is the core privacy property of the multi-hop design.
 
 ---
 
-### Step-by-step guideline
+## Prerequisites
+
+The following tools must be installed on the operator's local machine before using this project:
+
+| Tool | Minimum Version | Purpose |
+|------|----------------|---------|
+| [Terraform](https://www.terraform.io/downloads) | >= 1.5 | Cloud infrastructure provisioning |
+| [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) | >= 2.15 | Node configuration management |
+| [GNU Make](https://www.gnu.org/software/make/) | any | Task automation |
+| `curl` | any | Used by PKI scripts to download Easy-RSA |
+| SSH key pair | Ed25519 recommended | Authentication to provisioned nodes |
+
+**Easy-RSA** is downloaded automatically when running `make pki-init` — no manual installation required.
+
+You will also need at least one of the following cloud accounts:
+
+- **DigitalOcean** account with an API token (read + write permissions)
+- **AWS** account with IAM credentials (programmatic access to EC2)
 
 ---
 
-### Repository Source Code Usage
+## Installation
 
-In case if you want to clone this repository and create your own OpenVPN DigitalOcean infrastructure, here is how you can do this.
-Just follow next steps:
+### 1. Clone the Repository
 
-1. Clone this repository locally on your machine
+```bash
+git clone https://github.com/bl4drnnr/multi-hop-vpn-infrastructure.git
+cd multi-hop-vpn-infrastructure
+```
 
-    ```
-    git clone https://github.com/bl4drnnr/openvpn-digitalocean-infrastructure.git
-    ```
-2. In root folder of the project create file with name `terraform.tfvars`. The name can be whatever you want it to be, but it has to end with `.tfvars`.
-3. In this file put next string - `do_token = "<YOUR_DIGITALOCEAN_API_TOKEN>"`. If you don't know where to find it, see [here](https://docs.digitalocean.com/reference/api/create-personal-access-token/). **Make sure generated token has write permissions!**
-4. Open up your terminal and navigate to folder with project.
-5. Type `terraform plan` and then `terraform apply`. In case if you have changed the name of file with variables you need to specify it by using `-var-file` flag, so, your commands will be looking like this:
+### 2. Verify Tool Versions
 
-    ```
-    terraform plan -var-file="<NAME_OF_VARS_FILE>"
-    terraform apply -var-file="<NAME_OF_VARS_FILE>"
-    ```
-    The same situation if you want to destroy built infrastructure:
+```bash
+terraform --version   # Should show >= 1.5
+ansible --version     # Should show >= 2.15
+make --version        # Any version
+```
 
-    ```
-    terraform destroy
-    terraform destroy -var-file="<NAME_OF_VARS_FILE>"
-    ```
+### 3. Ensure SSH Key Exists
 
----
+The project uses your local SSH key to authenticate with cloud nodes. By default, it looks for `~/.ssh/id_ed25519.pub`. If your key is in a different location, you will configure the path in `terraform.tfvars` (see [Credential Setup](#credential-setup)).
 
-### References and Contact
+```bash
+# Generate a key if you don't have one
+ssh-keygen -t ed25519 -C "vpn-infrastructure"
+```
 
-- Developer contact - [mikhail.bahdashych@protonmail.com](mailto:mikhail.bahdashych@protonmail.com)
-- Terraform official page - [link](https://www.terraform.io/)
-- DigitalOcean official page - [link](https://www.digitalocean.com/)
-- OpenVPN official page - [link](https://openvpn.net/)
-- Terraform documentation - [link](https://developer.hashicorp.com/terraform)
-- Terraform with DigitalOcean provider documentation - [link](https://registry.terraform.io/providers/digitalocean/digitalocean/latest/docs)
-- DigitalOcean generation API tokens - [link](https://docs.digitalocean.com/reference/api/create-personal-access-token/)
-- Official guideline by DigitalOcean - [link](https://www.digitalocean.com/community/tutorials/how-to-set-up-and-configure-an-openvpn-server-on-ubuntu-20-04)
+### 4. Initialize Terraform
+
+```bash
+make init
+```
+
+This downloads the required Terraform providers (DigitalOcean, AWS, local).
 
 ---
 
-### License
+## Credential Setup
 
-Licensed by [MIT LICENSE](LICENSE).
+### Create the Variables File
+
+```bash
+cp terraform.tfvars.example terraform/terraform.tfvars
+```
+
+Edit `terraform/terraform.tfvars` with your editor of choice. Below is a description of every variable.
+
+### DigitalOcean
+
+1. Log in to [DigitalOcean](https://cloud.digitalocean.com/).
+2. Navigate to **API** > **Tokens** > **Generate New Token**.
+3. Create a token with **read + write** scope.
+4. Set the token in your tfvars:
+
+```hcl
+do_token = "dop_v1_your_token_here"
+```
+
+### AWS
+
+1. Log in to the [AWS Console](https://console.aws.amazon.com/).
+2. Navigate to **IAM** > **Users** > create or select a user > **Security credentials** > **Create access key**.
+3. Export the credentials as environment variables (Terraform reads these automatically):
+
+```bash
+export AWS_ACCESS_KEY_ID="AKIA..."
+export AWS_SECRET_ACCESS_KEY="your_secret_key"
+```
+
+4. Optionally set the default AWS region in your tfvars (defaults to `eu-central-1`):
+
+```hcl
+aws_region = "eu-central-1"
+```
+
+### SSH Key Path
+
+If your public key is not at the default `~/.ssh/id_ed25519.pub`:
+
+```hcl
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+```
+
+### Full Example
+
+```hcl
+do_token            = "dop_v1_abc123..."
+aws_region          = "eu-central-1"
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+
+vpn_chain = [
+  { name = "entry-fra", provider = "digitalocean", region = "fra1" },
+  { name = "exit-ams",  provider = "digitalocean", region = "ams3" }
+]
+```
+
+---
+
+## Usage
+
+The full lifecycle is: **provision infrastructure** > **set up PKI** > **configure nodes** > **create client credentials** > **connect**.
+
+### Step 1: Provision Cloud Infrastructure
+
+```bash
+# Preview what Terraform will create
+make plan
+
+# Create the infrastructure
+make apply
+```
+
+Terraform provisions the nodes, SSH keys, firewalls/security groups, and generates the Ansible inventory.
+
+### Step 2: Initialize the Local PKI
+
+```bash
+# Creates the Certificate Authority on your local machine
+make pki-init
+```
+
+This downloads Easy-RSA, initializes a PKI directory under `pki/`, builds the CA, and generates DH parameters. **You will be prompted to set a CA passphrase** — remember it, you need it for signing certificates.
+
+### Step 3: Generate the Server Certificate
+
+```bash
+make server-cert
+```
+
+Generates and signs the OpenVPN server certificate. The CA passphrase is required.
+
+### Step 4: Configure All Nodes
+
+```bash
+make configure
+```
+
+Runs the full Ansible playbook suite against all nodes:
+1. **Common** — OS updates, fail2ban, SSH hardening, IP forwarding
+2. **WireGuard** — key generation, tunnel configuration, startup
+3. **OpenVPN** — server installation and configuration (entry node only)
+4. **Routing** — iptables rules per node role
+
+### Step 5: Create a Client Certificate and Config
+
+```bash
+make client-cert CLIENT=laptop
+make client-config CLIENT=laptop
+```
+
+The first command generates and signs a client certificate. The second produces a self-contained `clients/laptop.ovpn` file with all certificates and keys embedded.
+
+### Step 6: Connect
+
+Import the generated `.ovpn` file into any OpenVPN-compatible client:
+- **macOS**: [Tunnelblick](https://tunnelblick.net/) or OpenVPN Connect
+- **Linux**: `sudo openvpn --config clients/laptop.ovpn`
+- **Windows**: [OpenVPN GUI](https://openvpn.net/community-downloads/)
+- **iOS / Android**: OpenVPN Connect (import the `.ovpn` file)
+
+### Teardown
+
+```bash
+make destroy
+```
+
+Removes all cloud resources. The local PKI and client configs are preserved.
+
+---
+
+## Chain Configuration Examples
+
+The chain is defined as an ordered list in `terraform.tfvars`. The first element is always the entry node, the last is always the exit node, and any elements in between become relay nodes automatically.
+
+### Minimal: 2-Node (DigitalOcean Only)
+
+```hcl
+vpn_chain = [
+  { name = "entry-fra", provider = "digitalocean", region = "fra1" },
+  { name = "exit-ams",  provider = "digitalocean", region = "ams3" }
+]
+```
+
+### 3-Node with Relay (Mixed Providers)
+
+```hcl
+vpn_chain = [
+  { name = "entry-fra",  provider = "digitalocean", region = "fra1" },
+  { name = "relay-aws",  provider = "aws",          region = "eu-central-1" },
+  { name = "exit-sgp",   provider = "digitalocean", region = "sgp1" }
+]
+```
+
+### 4-Node Multi-Relay (Multi-Region)
+
+```hcl
+vpn_chain = [
+  { name = "entry-nyc",   provider = "digitalocean", region = "nyc3" },
+  { name = "relay-fra",   provider = "digitalocean", region = "fra1" },
+  { name = "relay-aws",   provider = "aws",          region = "ap-southeast-1" },
+  { name = "exit-sgp",    provider = "digitalocean", region = "sgp1" }
+]
+```
+
+### Custom Instance Sizes
+
+```hcl
+vpn_chain = [
+  { name = "entry-fra", provider = "digitalocean", region = "fra1", size = "s-2vcpu-2gb" },
+  { name = "exit-aws",  provider = "aws",          region = "eu-west-1", size = "t3.small" }
+]
+```
+
+Default sizes are `s-1vcpu-1gb` for DigitalOcean and `t3.micro` for AWS.
+
+---
+
+## Make Targets Reference
+
+| Target | Description |
+|--------|-------------|
+| `make init` | Initialize Terraform (download providers) |
+| `make plan` | Preview infrastructure changes |
+| `make apply` | Provision all cloud infrastructure |
+| `make destroy` | Tear down all cloud resources |
+| `make pki-init` | Initialize local Easy-RSA Certificate Authority |
+| `make server-cert` | Generate and sign the OpenVPN server certificate |
+| `make client-cert CLIENT=<name>` | Generate and sign a client certificate |
+| `make client-config CLIENT=<name>` | Produce a self-contained `.ovpn` client config file |
+| `make configure` | Run the full Ansible playbook (all 4 phases) |
+| `make deploy` | Full deployment shortcut (`apply` + `configure`) |
+| `make status` | Ansible ping to verify all nodes are reachable |
+
+---
+
+## Verification and Testing
+
+This section documents how to verify that the deployed infrastructure works correctly. Each step corresponds to a screenshot in the `static/` directory.
+
+### Step-by-Step Verification Sequence
+
+Run these commands in order after completing the [Credential Setup](#credential-setup).
+
+**1. Terraform Init** (`static/01-terraform-init.png`)
+
+```bash
+make init
+```
+
+Screenshot the terminal output showing successful provider installation.
+
+---
+
+**2. Terraform Plan** (`static/02-terraform-plan.png`)
+
+```bash
+make plan
+```
+
+Screenshot the plan summary showing the number of resources to be created (droplets, firewalls, SSH keys, inventory file).
+
+---
+
+**3. Terraform Apply** (`static/03-terraform-apply.png`)
+
+```bash
+make apply
+```
+
+Screenshot the output showing `Apply complete! Resources: X added, 0 changed, 0 destroyed.` and the output values (node IPs, chain summary).
+
+---
+
+**4. DigitalOcean Dashboard** (`static/04-digitalocean-droplets-dashboard.png`)
+
+Open the DigitalOcean web console at [cloud.digitalocean.com](https://cloud.digitalocean.com/). Screenshot the **Droplets** page showing the provisioned nodes with their names, regions, and IP addresses matching the Terraform output.
+
+---
+
+**5. PKI Initialization** (`static/05-pki-init.png`)
+
+```bash
+make pki-init
+```
+
+Screenshot the output showing Easy-RSA download, CA creation, and DH parameter generation.
+
+---
+
+**6. Server Certificate Generation** (`static/06-server-cert-generation.png`)
+
+```bash
+make server-cert
+```
+
+Screenshot the output showing the server certificate being generated and signed.
+
+---
+
+**7. Ansible Configure** (`static/07-ansible-configure.png`)
+
+```bash
+make configure
+```
+
+Screenshot the Ansible play recap at the end of the run, showing all hosts with `ok` and `changed` counts and zero `failed`.
+
+---
+
+**8. WireGuard Tunnel Status** (`static/08-wireguard-tunnel-status.png`)
+
+```bash
+cd ansible && ansible all -m shell -a "wg show" -i inventory/hosts.json
+```
+
+Screenshot the output on each node showing active WireGuard interfaces, peer public keys, allowed IPs, and a **recent handshake** timestamp (indicates the tunnel is live).
+
+---
+
+**9. Client Certificate Generation** (`static/09-client-cert-generation.png`)
+
+```bash
+make client-cert CLIENT=test
+```
+
+Screenshot the output showing the client certificate being generated and signed.
+
+---
+
+**10. Client Config Generation** (`static/10-client-config-generation.png`)
+
+```bash
+make client-config CLIENT=test
+```
+
+Screenshot the output showing the `.ovpn` file path and confirmation message.
+
+---
+
+**11. OpenVPN Client Connected** (`static/11-openvpn-client-connected.png`)
+
+```bash
+sudo openvpn --config clients/test.ovpn
+```
+
+Screenshot the OpenVPN client log showing `Initialization Sequence Completed` and the assigned `10.8.0.x` address. If using a GUI client (Tunnelblick, OpenVPN Connect), screenshot the connected status.
+
+---
+
+**12. Exit IP Verification** (`static/12-exit-ip-verification.png`)
+
+While connected to the VPN, run:
+
+```bash
+curl ifconfig.me
+```
+
+Screenshot showing that the returned IP address matches the **exit node's** public IP (not the entry node, and not your real IP). You can compare with the output of `terraform -chdir=terraform output exit_node_ip`.
+
+---
+
+**13. Ansible Status Ping** (`static/13-ansible-ping-status.png`)
+
+```bash
+make status
+```
+
+Screenshot showing `SUCCESS` pong responses from all nodes in the chain.
+
+---
+
+**14. Terraform Destroy** (`static/14-terraform-destroy.png`)
+
+```bash
+make destroy
+```
+
+Screenshot the output showing `Destroy complete! Resources: X destroyed.` confirming clean teardown of all cloud resources.
+
+---
+
+## Repository Structure
+
+```
+multi-hop-vpn-infrastructure/
+├── terraform/                          # Infrastructure provisioning
+│   ├── main.tf                         # Module calls for DO and AWS nodes
+│   ├── variables.tf                    # vpn_chain definition + credentials
+│   ├── outputs.tf                      # Node IPs and chain summary
+│   ├── versions.tf                     # Required providers (DO, AWS, local)
+│   ├── providers.tf                    # Provider configs with AWS region aliases
+│   ├── locals.tf                       # Computed node roles, tunnel pairs, IPs
+│   ├── ssh.tf                          # SSH key resources (uses local key)
+│   ├── firewalls.tf                    # DO firewalls + AWS security groups
+│   ├── inventory.tf                    # Generates Ansible inventory JSON
+│   └── modules/
+│       ├── digitalocean-node/          # DO droplet resource
+│       └── aws-node/                   # EC2 instance + Ubuntu AMI lookup
+├── ansible/                            # Configuration management
+│   ├── ansible.cfg                     # Ansible settings
+│   ├── site.yml                        # Master playbook
+│   ├── inventory/                      # (generated) Terraform-produced hosts.json
+│   ├── group_vars/
+│   │   └── all.yml                     # Global variables
+│   ├── roles/
+│   │   ├── common/                     # OS hardening, fail2ban, sysctl
+│   │   ├── wireguard/                  # WireGuard tunnels
+│   │   ├── openvpn/                    # OpenVPN server (entry node)
+│   │   └── routing/                    # iptables per node role
+│   └── playbooks/
+│       ├── 01-common.yml
+│       ├── 02-wireguard.yml
+│       ├── 03-openvpn.yml
+│       └── 04-routing.yml
+├── scripts/                            # PKI management
+│   ├── init-pki.sh                     # Initialize local CA
+│   ├── generate-server-cert.sh         # Server certificate
+│   ├── generate-client-cert.sh         # Client certificate
+│   └── generate-client-config.sh       # Produce .ovpn file
+├── static/                             # Verification screenshots
+├── pki/                                # (gitignored) Local CA directory
+├── clients/                            # (gitignored) Generated .ovpn files
+├── Makefile                            # Automation targets
+├── terraform.tfvars.example            # Example configuration
+├── .gitignore
+├── README.md
+└── LICENSE
+```
+
+---
+
+## Security Considerations
+
+### What This Project Does Well
+
+- **CA private key stays local.** The Certificate Authority is initialized on your machine via Easy-RSA. The CA private key is never uploaded to any cloud node. Only the CA certificate (public) and signed server/client certificates are distributed.
+- **WireGuard keys generated on-node by Ansible.** Private keys are created on each node using `wg genkey` and never leave the node. Only public keys are exchanged between peers. This keeps WireGuard secrets out of Terraform state.
+- **Your own SSH key.** The project references your existing SSH public key rather than generating a new key pair in Terraform. No private key material exists in the state file.
+- **Restrictive firewalls.** WireGuard ports (51820/udp) are only open to other nodes in the chain, not the public internet. OpenVPN (1194/udp) is only open on the entry node. SSH (22/tcp) is open for administration.
+- **OS hardening.** All nodes receive fail2ban, SSH hardening (no password auth, no root login), and IPv6 is disabled to prevent leak vectors.
+
+### What This Project Does Not Do
+
+- **Multi-hop adds privacy, not encryption strength.** Each tunnel hop is independently encrypted, but the fundamental encryption strength is that of a single WireGuard or OpenVPN tunnel. The benefit is **traffic analysis resistance** — no single compromised node reveals the full picture.
+- **Not anonymous against a global adversary.** If an attacker controls all nodes or can observe all network links simultaneously, they can correlate traffic. This is a general limitation of VPN-based privacy, not specific to this project.
+- **Performance cost per hop.** Each additional relay adds latency (typically 1-5ms depending on geographic distance) and reduces throughput due to re-encryption overhead.
+
+---
+
+## Cost Estimates
+
+Approximate monthly costs based on the cheapest supported instance types. Actual costs vary by region and usage.
+
+| Chain Size | DigitalOcean (`s-1vcpu-1gb`) | AWS (`t3.micro`) | Mixed (DO entry + AWS exit) |
+|-----------|-------------------------------|-------------------|------------------------------|
+| 2 nodes   | ~$12/mo                       | ~$15/mo           | ~$13/mo                      |
+| 3 nodes   | ~$18/mo                       | ~$22/mo           | ~$20/mo                      |
+| 4 nodes   | ~$24/mo                       | ~$30/mo           | ~$26/mo                      |
+
+---
+
+## License
+
+Licensed under the [MIT License](LICENSE).

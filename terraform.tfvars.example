@@ -1,6 +1,9 @@
 # DigitalOcean API token
 do_token = "your-digitalocean-api-token"
 
+# AWS credentials profile from ~/.aws/credentials (default: "default")
+aws_profile = "default"
+
 # Default AWS region (used by the default provider)
 aws_region = "eu-central-1"
 

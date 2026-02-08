@@ -36,6 +36,12 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
+variable "aws_profile" {
+  description = "AWS credentials profile name from ~/.aws/credentials"
+  type        = string
+  default     = "default"
+}
+
 variable "ssh_public_key_path" {
   description = "Path to the SSH public key to install on nodes"
   type        = string

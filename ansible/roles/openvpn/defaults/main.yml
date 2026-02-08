@@ -8,4 +8,4 @@ openvpn_netmask: "255.255.255.0"
 dns_servers:
   - "1.1.1.1"
   - "1.0.0.1"
-pki_dir: "{{ playbook_dir }}/../pki"
+pki_dir: "{{ playbook_dir }}/../../pki"

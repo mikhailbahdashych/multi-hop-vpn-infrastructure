@@ -181,16 +181,39 @@ do_token = "dop_v1_your_token_here"
 
 ### AWS
 
-1. Log in to the [AWS Console](https://console.aws.amazon.com/).
-2. Navigate to **IAM** > **Users** > create or select a user > **Security credentials** > **Create access key**.
-3. Export the credentials as environment variables (Terraform reads these automatically):
+Terraform reads credentials from your local `~/.aws/credentials` file, which is the standard location used by the AWS CLI. No environment variable exports are needed.
+
+**1. Configure credentials with the AWS CLI** (if not already done):
 
 ```bash
-export AWS_ACCESS_KEY_ID="AKIA..."
-export AWS_SECRET_ACCESS_KEY="your_secret_key"
+aws configure
 ```
 
-4. Optionally set the default AWS region in your tfvars (defaults to `eu-central-1`):
+This prompts for your Access Key ID, Secret Access Key, default region, and output format, then writes them to `~/.aws/credentials` and `~/.aws/config`.
+
+**2. Verify the credentials file exists:**
+
+```bash
+cat ~/.aws/credentials
+```
+
+It should look like this:
+
+```ini
+[default]
+aws_access_key_id = AKIA...
+aws_secret_access_key = your_secret_key
+```
+
+**3. If you use a named profile** (e.g. `[vpn-infra]` instead of `[default]`), set the profile name in your tfvars:
+
+```hcl
+aws_profile = "vpn-infra"
+```
+
+If omitted, the `default` profile is used.
+
+**4. Optionally set the default AWS region** (defaults to `eu-central-1`):
 
 ```hcl
 aws_region = "eu-central-1"
@@ -208,6 +231,7 @@ ssh_public_key_path = "~/.ssh/id_rsa.pub"
 
 ```hcl
 do_token            = "dop_v1_abc123..."
+aws_profile         = "default"
 aws_region          = "eu-central-1"
 ssh_public_key_path = "~/.ssh/id_ed25519.pub"
 
@@ -358,13 +382,9 @@ Default sizes are `s-1vcpu-1gb` for DigitalOcean and `t3.micro` for AWS.
 
 ## Verification and Testing
 
-This section documents how to verify that the deployed infrastructure works correctly. Each step corresponds to a screenshot in the `static/` directory.
+This section documents how to verify that the deployed infrastructure works correctly. Each step corresponds to a screenshot in the `static/` directory. Run these commands in order after completing the [Credential Setup](#credential-setup).
 
-### Step-by-Step Verification Sequence
-
-Run these commands in order after completing the [Credential Setup](#credential-setup).
-
-**1. Terraform Init** (`static/01-terraform-init.png`)
+### 1. Terraform Init
 
 ```bash
 make init
@@ -372,9 +392,11 @@ make init
 
 Screenshot the terminal output showing successful provider installation.
 
+![Terraform Init](static/01-terraform-init.png)
+
 ---
 
-**2. Terraform Plan** (`static/02-terraform-plan.png`)
+### 2. Terraform Plan
 
 ```bash
 make plan
@@ -382,9 +404,11 @@ make plan
 
 Screenshot the plan summary showing the number of resources to be created (droplets, firewalls, SSH keys, inventory file).
 
+![Terraform Plan](static/02-terraform-plan.png)
+
 ---
 
-**3. Terraform Apply** (`static/03-terraform-apply.png`)
+### 3. Terraform Apply
 
 ```bash
 make apply
@@ -392,15 +416,19 @@ make apply
 
 Screenshot the output showing `Apply complete! Resources: X added, 0 changed, 0 destroyed.` and the output values (node IPs, chain summary).
 
+![Terraform Apply](static/03-terraform-apply.png)
+
 ---
 
-**4. DigitalOcean Dashboard** (`static/04-digitalocean-droplets-dashboard.png`)
+### 4. DigitalOcean Dashboard
 
 Open the DigitalOcean web console at [cloud.digitalocean.com](https://cloud.digitalocean.com/). Screenshot the **Droplets** page showing the provisioned nodes with their names, regions, and IP addresses matching the Terraform output.
 
+![DigitalOcean Droplets Dashboard](static/04-digitalocean-droplets-dashboard.png)
+
 ---
 
-**5. PKI Initialization** (`static/05-pki-init.png`)
+### 5. PKI Initialization
 
 ```bash
 make pki-init
@@ -408,9 +436,11 @@ make pki-init
 
 Screenshot the output showing Easy-RSA download, CA creation, and DH parameter generation.
 
+![PKI Initialization](static/05-pki-init.png)
+
 ---
 
-**6. Server Certificate Generation** (`static/06-server-cert-generation.png`)
+### 6. Server Certificate Generation
 
 ```bash
 make server-cert
@@ -418,9 +448,11 @@ make server-cert
 
 Screenshot the output showing the server certificate being generated and signed.
 
+![Server Certificate Generation](static/06-server-cert-generation.png)
+
 ---
 
-**7. Ansible Configure** (`static/07-ansible-configure.png`)
+### 7. Ansible Configure
 
 ```bash
 make configure
@@ -428,19 +460,23 @@ make configure
 
 Screenshot the Ansible play recap at the end of the run, showing all hosts with `ok` and `changed` counts and zero `failed`.
 
+![Ansible Configure](static/07-ansible-configure.png)
+
 ---
 
-**8. WireGuard Tunnel Status** (`static/08-wireguard-tunnel-status.png`)
+### 8. WireGuard Tunnel Status
 
 ```bash
-cd ansible && ansible all -m shell -a "wg show" -i inventory/hosts.json
+cd ansible && ansible all -m shell -a "wg show" -i inventory/hosts.yml
 ```
 
 Screenshot the output on each node showing active WireGuard interfaces, peer public keys, allowed IPs, and a **recent handshake** timestamp (indicates the tunnel is live).
 
+![WireGuard Tunnel Status](static/08-wireguard-tunnel-status.png)
+
 ---
 
-**9. Client Certificate Generation** (`static/09-client-cert-generation.png`)
+### 9. Client Certificate Generation
 
 ```bash
 make client-cert CLIENT=test
@@ -448,9 +484,11 @@ make client-cert CLIENT=test
 
 Screenshot the output showing the client certificate being generated and signed.
 
+![Client Certificate Generation](static/09-client-cert-generation.png)
+
 ---
 
-**10. Client Config Generation** (`static/10-client-config-generation.png`)
+### 10. Client Config Generation
 
 ```bash
 make client-config CLIENT=test
@@ -458,9 +496,11 @@ make client-config CLIENT=test
 
 Screenshot the output showing the `.ovpn` file path and confirmation message.
 
+![Client Config Generation](static/10-client-config-generation.png)
+
 ---
 
-**11. OpenVPN Client Connected** (`static/11-openvpn-client-connected.png`)
+### 11. OpenVPN Client Connected
 
 ```bash
 sudo openvpn --config clients/test.ovpn
@@ -468,21 +508,29 @@ sudo openvpn --config clients/test.ovpn
 
 Screenshot the OpenVPN client log showing `Initialization Sequence Completed` and the assigned `10.8.0.x` address. If using a GUI client (Tunnelblick, OpenVPN Connect), screenshot the connected status.
 
+![OpenVPN Client Connected](static/11-openvpn-client-connected.png)
+
 ---
 
-**12. Exit IP Verification** (`static/12-exit-ip-verification.png`)
+### 12. Exit IP Verification
 
 While connected to the VPN, run:
 
 ```bash
-curl ifconfig.me
+curl -4 ifconfig.me
 ```
 
-Screenshot showing that the returned IP address matches the **exit node's** public IP (not the entry node, and not your real IP). You can compare with the output of `terraform -chdir=terraform output exit_node_ip`.
+Screenshot showing that the returned IP address matches the **exit node's** public IP (not the entry node, and not your real IP). You can compare with the output of `terraform -chdir=terraform output -raw exit_node_ip`.
+
+> **Note:** Use `curl -4` to force IPv4. The VPN tunnels only carry IPv4 traffic, so plain `curl` may resolve over IPv6 and bypass the tunnel entirely.
+
+![Exit IP Verification](static/12-exit-ip-verification.png)
 
 ---
 
-**13. Ansible Status Ping** (`static/13-ansible-ping-status.png`)
+### 13. Ansible Status Ping
+
+> **Important:** Disconnect from the VPN before running this command. While connected, the VPN tunnel routes traffic through the chain, which can make nodes unreachable via their public IPs from your machine.
 
 ```bash
 make status
@@ -490,15 +538,19 @@ make status
 
 Screenshot showing `SUCCESS` pong responses from all nodes in the chain.
 
+![Ansible Status Ping](static/13-ansible-ping-status.png)
+
 ---
 
-**14. Terraform Destroy** (`static/14-terraform-destroy.png`)
+### 14. Terraform Destroy
 
 ```bash
 make destroy
 ```
 
 Screenshot the output showing `Destroy complete! Resources: X destroyed.` confirming clean teardown of all cloud resources.
+
+![Terraform Destroy](static/14-terraform-destroy.png)
 
 ---
 
@@ -515,16 +567,17 @@ multi-hop-vpn-infrastructure/
 │   ├── locals.tf                       # Computed node roles, tunnel pairs, IPs
 │   ├── ssh.tf                          # SSH key resources (uses local key)
 │   ├── firewalls.tf                    # DO firewalls + AWS security groups
-│   ├── inventory.tf                    # Generates Ansible inventory JSON
+│   ├── inventory.tf                    # Generates Ansible inventory YAML
 │   └── modules/
 │       ├── digitalocean-node/          # DO droplet resource
 │       └── aws-node/                   # EC2 instance + Ubuntu AMI lookup
 ├── ansible/                            # Configuration management
 │   ├── ansible.cfg                     # Ansible settings
 │   ├── site.yml                        # Master playbook
-│   ├── inventory/                      # (generated) Terraform-produced hosts.json
-│   ├── group_vars/
-│   │   └── all.yml                     # Global variables
+│   ├── inventory/                      # (generated) Terraform-produced hosts.yml
+│   │   ├── group_vars/
+│   │   │   └── all.yml                 # Global variables
+│   │   └── hosts.yml                   # (gitignored) Generated by Terraform
 │   ├── roles/
 │   │   ├── common/                     # OS hardening, fail2ban, sysctl
 │   │   ├── wireguard/                  # WireGuard tunnels

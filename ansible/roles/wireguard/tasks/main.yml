@@ -1,23 +1,22 @@
----
 - name: Deploy WireGuard interface configs
   ansible.builtin.template:
     src: wg_interface.conf.j2
-    dest: "/etc/wireguard/{{ item.interface }}.conf"
+    dest: /etc/wireguard/{{ item.interface }}.conf
     owner: root
     group: root
-    mode: "0600"
-  loop: "{{ wg_tunnels }}"
+    mode: '0600'
+  loop: '{{ wg_tunnels }}'
   loop_control:
-    label: "{{ item.interface }}"
+    label: '{{ item.interface }}'
   notify: restart wireguard
 
 - name: Collect unique WireGuard interfaces
   ansible.builtin.set_fact:
-    wg_interfaces: "{{ wg_tunnels | map(attribute='interface') | unique | list }}"
+    wg_interfaces: '{{ wg_tunnels | map(attribute=''interface'') | unique | list }}'
 
 - name: Enable and start WireGuard interfaces
   ansible.builtin.systemd:
-    name: "wg-quick@{{ item }}"
+    name: wg-quick@{{ item }}
     enabled: true
-    state: started
-  loop: "{{ wg_interfaces }}"
+    state: restarted
+  loop: '{{ wg_interfaces }}'

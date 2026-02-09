@@ -1,17 +1,6 @@
-<h1 align="center">
-    Multi-Hop VPN Infrastructure
-</h1>
+# Multi-Hop VPN Infrastructure
 
-<p align="center">
-    Multi-cloud, multi-hop VPN chain deployment using Terraform, Ansible, OpenVPN, and WireGuard across DigitalOcean and AWS.
-</p>
-
-![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white)
-![Ansible](https://img.shields.io/badge/ansible-%231A1918.svg?style=for-the-badge&logo=ansible&logoColor=white)
-![DigitalOcean](https://img.shields.io/badge/DigitalOcean-%230167ff.svg?style=for-the-badge&logo=digitalOcean&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)
-![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
-![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
+Multi-cloud, multi-hop VPN chain deployment using Terraform, Ansible, OpenVPN, and WireGuard across DigitalOcean and AWS.
 
 ---
 
